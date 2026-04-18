@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<title>EzzeBuy System</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+
+body{
+background: linear-gradient(120deg,#84fab0,#8fd3f4);
+height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+font-family:Arial;
+}
+
+.card{
+backdrop-filter: blur(15px);
+background: rgba(255,255,255,0.2);
+border-radius:20px;
+box-shadow:0 10px 30px rgba(0,0,0,0.2);
+padding:40px;
+width:350px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card text-center">
+
+<div class="text-4xl mb-4">📦</div>
+
+<h2 class="text-2xl font-bold mb-6">EzzeBuy Login</h2>
+
+<form method="POST">
+
+<input
+class="w-full p-3 rounded-lg mb-4"
+type="text"
+name="username"
+placeholder="Username"
+required>
+
+<input
+class="w-full p-3 rounded-lg mb-4"
+type="password"
+name="password"
+placeholder="Password"
+required>
+
+<button
+class="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition">
+Login
+</button>
+
+</form>
+
+</div>
+
+</body>
+
+</html>
