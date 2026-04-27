@@ -12,6 +12,7 @@ class IMSApp {
         this.initializeComponents();
         this.setupAnimations();
         this.setupNavigation();
+        this.initTheme();
         this.initTooltips();
         this.initLoadingStates();
         this.initCharts();
@@ -64,6 +65,12 @@ class IMSApp {
             form.addEventListener('submit', this.handleFormSubmit.bind(this));
         });
 
+        // Theme toggle
+        const themeToggle = document.querySelector('[data-theme-toggle]');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', this.toggleTheme.bind(this));
+        }
+
         // Navigation active state
         this.setupNavigation();
     }
@@ -113,6 +120,31 @@ class IMSApp {
                 link.classList.add('active');
             }
         });
+    }
+
+    initTheme() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-mode');
+        }
+        this.updateThemeToggleText();
+    }
+
+    toggleTheme() {
+        document.body.classList.toggle('dark-mode');
+        const theme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+        localStorage.setItem('theme', theme);
+        this.updateThemeToggleText();
+    }
+
+    updateThemeToggleText() {
+        const themeToggle = document.querySelector('[data-theme-toggle]');
+        if (!themeToggle) return;
+
+        const isDark = document.body.classList.contains('dark-mode');
+        themeToggle.innerHTML = isDark
+            ? '<i class="fas fa-sun"></i> Light'
+            : '<i class="fas fa-moon"></i> Dark';
     }
 
     handleFileSelect(event) {
