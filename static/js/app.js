@@ -74,8 +74,8 @@ class IMSApp {
             dropZone.dataset.imsBound = 'true';
         }
 
-        // Optional AJAX forms (opt-in only)
-        const ajaxForms = document.querySelectorAll('form[data-ajax="true"]');
+        // Optional AJAX forms (opt-in only) + legacy upload form support
+        const ajaxForms = document.querySelectorAll('form[data-ajax="true"], form#uploadForm');
         ajaxForms.forEach(form => {
             if (!form.dataset.imsBound) {
                 form.addEventListener('submit', this.handleFormSubmit.bind(this));
