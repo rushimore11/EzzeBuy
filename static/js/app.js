@@ -947,7 +947,7 @@ class IMSApp {
         this.initLoadingStates();
         this.initCharts();
 
-        // ✅ FIX: Only load dashboard on home
+        // ✅ FIX: Load dashboard ONLY on home
         if (window.location.pathname === '/' || window.location.pathname === '/index') {
             this.loadDashboardData();
         }
@@ -957,6 +957,7 @@ class IMSApp {
         }
     }
 
+    // ================= EVENT LISTENERS =================
     setupEventListeners() {
         const uploadForm = document.getElementById('uploadForm');
         if (uploadForm) {
@@ -969,26 +970,26 @@ class IMSApp {
         }
     }
 
-    // ================= DASHBOARD FIX =================
+    // ================= 🔥 FIXED DASHBOARD =================
     async loadDashboardData() {
         try {
             console.log('Loading dashboard data...');
-
+            
             const response = await fetch('/api/inventory-summary', {
                 method: 'GET',
                 credentials: 'include'
             });
 
-            // ✅ HANDLE REDIRECT (MAIN BUG FIX)
+            // ✅ HANDLE LOGIN REDIRECT (MAIN FIX)
             if (response.redirected) {
                 window.location.href = response.url;
                 return;
             }
 
-            // ✅ HANDLE NON JSON RESPONSE
+            // ✅ HANDLE NON-JSON RESPONSE
             const contentType = response.headers.get("content-type");
             if (!contentType || !contentType.includes("application/json")) {
-                console.warn("Not JSON response");
+                console.warn("Non JSON response (likely login page)");
                 return;
             }
 
@@ -1008,19 +1009,17 @@ class IMSApp {
     }
 
     updateDashboardStats(metrics) {
-        this.setText("totalProducts", metrics.total_products);
-        this.setText("lowStockCount", metrics.low_stock_count);
-        this.setText("nearExpiryCount", metrics.near_expiry_count);
+        const elements = {
+            'totalProducts': this.formatNumber(metrics.total_products || 0),
+            'lowStockCount': this.formatNumber(metrics.low_stock_count || 0),
+            'totalRevenue': this.formatCurrency(metrics.total_revenue || 0),
+            'nearExpiryCount': this.formatNumber(metrics.near_expiry_count || 0)
+        };
 
-        const revenue = document.getElementById("totalRevenue");
-        if (revenue) {
-            revenue.textContent = this.formatCurrency(metrics.total_revenue || 0);
-        }
-    }
-
-    setText(id, value) {
-        const el = document.getElementById(id);
-        if (el) el.textContent = value || 0;
+        Object.entries(elements).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        });
     }
 
     // ================= FORM HANDLING =================
@@ -1048,9 +1047,9 @@ class IMSApp {
                 const data = await response.json();
 
                 if (data.success) {
-                    alert(data.message || "Success");
+                    this.showNotification(data.message || "Success", "success");
                 } else {
-                    alert(data.error || "Error");
+                    this.showNotification(data.error || "Error", "error");
                 }
             } else {
                 location.reload();
@@ -1058,7 +1057,7 @@ class IMSApp {
 
         } catch (err) {
             console.error(err);
-            alert("Network error");
+            this.showNotification("Network error", "error");
         }
     }
 
@@ -1093,13 +1092,43 @@ class IMSApp {
                 document.getElementById("predictionResult").innerText =
                     "Prediction: " + result.prediction.toFixed(2);
             } else {
-                alert(result.error);
+                this.showNotification(result.error, "error");
             }
 
         } catch (err) {
             console.error(err);
-            alert("Prediction failed");
+            this.showNotification("Prediction failed", "error");
         }
+    }
+
+    // ================= THEME (RESTORED) =================
+    initThemePreference() {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+        this.setTheme(theme);
+    }
+
+    injectThemeToggle() {
+        const nav = document.querySelector('.navbar-nav');
+        if (!nav || document.querySelector('.theme-toggle-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.className = "theme-toggle-btn";
+        btn.innerText = "🌙";
+
+        btn.onclick = () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            this.setTheme(next);
+        };
+
+        nav.appendChild(btn);
+    }
+
+    setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
     }
 
     // ================= UTILS =================
@@ -1110,12 +1139,18 @@ class IMSApp {
         }).format(amount);
     }
 
-    // ===== बाकी features untouched ठेवले =====
+    formatNumber(num) {
+        return new Intl.NumberFormat('en-IN').format(num);
+    }
+
+    showNotification(message, type = "info") {
+        alert(message); // simple fallback
+    }
+
+    // ===== keep your other features untouched =====
     initializeComponents() {}
     setupAnimations() {}
     setupNavigation() {}
-    initThemePreference() {}
-    injectThemeToggle() {}
     initTooltips() {}
     initLoadingStates() {}
     initCharts() {}
@@ -1126,5 +1161,3 @@ class IMSApp {
 document.addEventListener("DOMContentLoaded", () => {
     new IMSApp();
 });
-// // Global utility functions
-// window.IMSApp = IMSApp; 
