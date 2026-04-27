@@ -1,196 +1,103 @@
 # ------------------ IMPORTS ------------------
 import os
-import sys
 import warnings
 import pickle
-import logging
 import numpy as np
 import pandas as pd
-from datetime import datetime
 
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
-from flask import Flask, request, render_template, jsonify, redirect, url_for, flash, send_from_directory
+from flask import Flask, request, render_template, jsonify, redirect, url_for, flash
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.exceptions import BadRequest
+from werkzeug.security import generate_password_hash
 
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from models import users, User, save_users
+from utils import (
+    generate_inventory_report,
+    get_low_stock_products,
+    get_near_expiry_products,
+    calculate_inventory_metrics
+)
 
-# Add models and utils imports - ensure these files exist
-try:
-    from models import users, User, save_users
-    from utils import generate_inventory_report, get_low_stock_products, get_near_expiry_products, calculate_inventory_metrics
-except ImportError as e:
-    print(f"❌ Missing required files: {e}")
-    sys.exit(1)
-
-# ------------------ PRODUCTION CONFIG ------------------
 warnings.filterwarnings('ignore')
 
-# Flask app setup
-app = Flask(__name__)
-
-# Production security settings
-app.secret_key = os.environ.get('SECRET_KEY', 'inventory_secret_key_123_PROD')
-app.config['SESSION_COOKIE_SECURE'] = True
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
-
-# File paths - Render compatible
+# ------------------ APP CONFIG ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-STATIC_DIR = os.path.join(BASE_DIR, 'static')
-MODEL_DIR = os.path.join(BASE_DIR, 'models')
 
-# Create directories
-for directory in [DATA_DIR, STATIC_DIR, MODEL_DIR]:
-    os.makedirs(directory, exist_ok=True)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
+app.secret_key = "inventory_secret_key_123"
 
-app.config.update({
-    'UPLOAD_FOLDER': DATA_DIR,
-    'MODEL_PATH': os.path.join(MODEL_DIR, 'trained_model.pkl'),
-    'DATA_PATH': os.path.join(DATA_DIR, 'data.csv'),
-    'MAX_CONTENT_LENGTH': 16 * 1024 * 1024,  # 16MB max file size
-})
+app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'data_set')
+app.config['MODEL_PATH'] = os.path.join(BASE_DIR, 'trained_model.pkl')
+app.config['DATA_PATH'] = os.path.join(app.config['UPLOAD_FOLDER'], 'data.csv')
 
-# ------------------ PRODUCTION LOGGING ------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(os.path.join(DATA_DIR, 'app.log'), mode='a')
-    ]
-)
-logger = logging.getLogger(__name__)
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# ------------------ LOGIN MANAGER ------------------
+# ------------------ LOGIN SETUP ------------------
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
-login_manager.login_message = "Please log in to access this page."
-login_manager.login_message_category = "warning"
 
 @login_manager.user_loader
 def load_user(user_id):
+    for user in users.values():
+        if str(user.id) == user_id:
+            return user
+    return None
+
+# ------------------ MODEL LOAD ------------------
+def load_model():
     try:
-        for user in users.values():
-            if str(user.id) == user_id:
-                return user
-        return None
-    except Exception as e:
-        logger.error(f"Error loading user {user_id}: {e}")
+        with open(app.config['MODEL_PATH'], 'rb') as f:
+            model = pickle.load(f)
+        print("✅ Model Loaded")
+        return model
+    except:
+        print("⚠️ Model not found, using fallback")
         return None
 
-# ------------------ MODEL LOADING (PRODUCTION SAFE) ------------------
-def load_trained_model():
-    """Safely load trained model with fallback"""
-    model_path = app.config['MODEL_PATH']
-    try:
-        if os.path.exists(model_path):
-            with open(model_path, 'rb') as f:
-                model_data = pickle.load(f)
-            
-            if hasattr(model_data, 'predict'):
-                logger.info("✅ Production model loaded successfully")
-                return model_data
-            elif isinstance(model_data, dict) and 'model' in model_data:
-                logger.info("✅ Production model loaded from dictionary")
-                return model_data['model']
-        
-        logger.warning("⚠️ No valid model found, using fallback")
-        return None
-        
-    except Exception as e:
-        logger.error(f"❌ Model loading failed: {e}")
-        return None
-
-# Global model instance
-model = load_trained_model()
+model = load_model()
 
 def simple_prediction(q1, q2, q3):
-    """Fallback prediction function"""
-    return float(0.2*q1 + 0.3*q2 + 0.5*q3)
-
-# ------------------ HELPER FUNCTIONS ------------------
-def validate_csv_file(file):
-    """Validate uploaded CSV file"""
-    if not file.filename.endswith('.csv'):
-        return False, "Only CSV files are allowed"
-    
-    if file.filename == '':
-        return False, "No file selected"
-    
-    try:
-        # Quick validation - read first few rows
-        df = pd.read_csv(file)
-        if df.empty:
-            return False, "CSV file is empty"
-        return True, "Valid file"
-    except:
-        return False, "Invalid CSV format"
+    return (0.2*q1 + 0.3*q2 + 0.5*q3)
 
 # ------------------ ROUTES ------------------
 
 @app.route("/")
 @login_required
 def home():
-    """Main dashboard"""
     return render_template("index.html")
 
-# ------------------ AUTHENTICATION ROUTES ------------------
+# ------------------ AUTH ------------------
+
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if current_user.is_authenticated:
         return redirect(url_for("home"))
 
     if request.method == "POST":
-        try:
-            username = request.form.get("username", "").strip()
-            password = request.form.get("password", "")
-            confirm_password = request.form.get("confirm_password", "")
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
 
-            # Validation
-            if len(username) < 3:
-                flash("Username must be at least 3 characters long.", "error")
-                return render_template("signup.html")
+        if len(username) < 3:
+            flash("Username too short", "error")
+            return render_template("signup.html")
 
-            if len(password) < 6:
-                flash("Password must be at least 6 characters long.", "error")
-                return render_template("signup.html")
+        if len(password) < 6:
+            flash("Password too short", "error")
+            return render_template("signup.html")
 
-            if password != confirm_password:
-                flash("Passwords do not match.", "error")
-                return render_template("signup.html")
+        if username in users:
+            flash("User already exists", "error")
+            return render_template("signup.html")
 
-            if username in users:
-                flash("Username already exists.", "error")
-                return render_template("signup.html")
+        uid = max((u.id for u in users.values()), default=0) + 1
+        users[username] = User(uid, username, generate_password_hash(password))
+        save_users(users)
 
-            # Create user
-            next_user_id = max((u.id for u in users.values()), default=0) + 1
-            new_user = User(
-                id=next_user_id, 
-                username=username, 
-                password_hash=generate_password_hash(password)
-            )
-            users[username] = new_user
-            save_users(users)
-
-            logger.info(f"New user registered: {username}")
-            flash("Account created successfully. Please sign in.", "success")
-            return redirect(url_for("login"))
-
-        except Exception as e:
-            logger.error(f"Signup error: {e}")
-            flash("Registration failed. Please try again.", "error")
+        flash("Account created. Login now.", "success")
+        return redirect(url_for("login"))
 
     return render_template("signup.html")
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -198,114 +105,102 @@ def login():
         return redirect(url_for("home"))
 
     if request.method == "POST":
-        try:
-            username = request.form.get("username", "").strip()
-            password = request.form.get("password", "")
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
 
-            user = users.get(username)
-            if user and user.verify_password(password):
-                login_user(user)
-                logger.info(f"User logged in: {username}")
-                return redirect(url_for("home"))
-            
-            flash("Invalid username or password.", "error")
-            logger.warning(f"Failed login attempt for: {username}")
+        user = users.get(username)
 
-        except Exception as e:
-            logger.error(f"Login error: {e}")
-            flash("Login failed. Please try again.", "error")
+        if user and user.verify_password(password):
+            login_user(user)
+            return redirect(url_for("home"))
+
+        flash("Invalid username or password", "error")
 
     return render_template("login.html")
+
 
 @app.route("/logout", methods=["GET", "POST"])
 @login_required
 def logout():
     if request.method == "POST":
-        username = current_user.username
         logout_user()
-        logger.info(f"User logged out: {username}")
-        flash("You have been logged out successfully.", "success")
+        flash("Logged out successfully", "success")
         return redirect(url_for("login"))
+
     return render_template("logout.html")
 
-# ------------------ FILE UPLOAD (PRODUCTION SECURE) ------------------
+# ------------------ FILE UPLOAD ------------------
+
 @app.route('/upload', methods=['POST'])
 @login_required
 def upload_file():
     try:
-        if 'file' not in request.files:
-            return jsonify({"success": False, "error": "No file part"}), 400
+        file = request.files.get('file')
 
-        file = request.files['file']
-        is_valid, message = validate_csv_file(file)
-        
-        if not is_valid:
-            return jsonify({"success": False, "error": message}), 400
+        if not file:
+            return jsonify({"success": False, "error": "No file uploaded"})
 
-        # Secure save
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"data_{timestamp}.csv"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        
-        file.save(filepath)
-        
-        # Update data path to latest file
-        app.config['DATA_PATH'] = filepath
-        
-        logger.info(f"File uploaded by {current_user.username}: {filename}")
-        return jsonify({
-            "success": True, 
-            "message": "File uploaded successfully",
-            "filename": filename
-        })
+        if not file.filename.endswith('.csv'):
+            return jsonify({"success": False, "error": "Upload CSV only"})
 
-    except BadRequest:
-        return jsonify({"success": False, "error": "File too large"}), 413
+        file.save(app.config['DATA_PATH'])
+        return jsonify({"success": True, "message": "File uploaded successfully"})
+
     except Exception as e:
-        logger.error(f"Upload error: {e}")
-        return jsonify({"success": False, "error": "Upload failed"}), 500
+        return jsonify({"success": False, "error": str(e)})
 
-# Serve static files
-@app.route('/static/<path:filename>')
-def static_files(filename):
-    return send_from_directory(STATIC_DIR, filename)
+# ------------------ INVENTORY PAGE ------------------
 
-# ------------------ INVENTORY ------------------
 @app.route('/inventory')
 @login_required
 def inventory():
     try:
-        data_path = app.config['DATA_PATH']
-        if not os.path.exists(data_path):
-            return render_template('error.html', error="Please upload a CSV file first")
+        if not os.path.exists(app.config['DATA_PATH']):
+            return render_template('error.html', error="Upload CSV first")
 
-        df = pd.read_csv(data_path)
-        
-        if df.empty:
-            return render_template('error.html', error="Uploaded CSV is empty")
+        df = pd.read_csv(app.config['DATA_PATH'])
 
-        low_stock = get_low_stock_products(df)
-        near_expiry = get_near_expiry_products(df)
-        metrics = calculate_inventory_metrics(df)
-
-        return render_template('inventory.html',
-                             restock_recommendations=low_stock,
-                             near_expiry_recommendations=near_expiry,
-                             metrics=metrics)
+        return render_template(
+            'inventory.html',
+            restock_recommendations=get_low_stock_products(df),
+            near_expiry_recommendations=get_near_expiry_products(df),
+            metrics=calculate_inventory_metrics(df)
+        )
 
     except Exception as e:
-        logger.error(f"Inventory error: {e}")
-        return render_template('error.html', error=f"Error loading inventory: {str(e)}")
+        return render_template('error.html', error=str(e))
+
+# ------------------ ANALYTICS ------------------
+
+@app.route('/analytics')
+@login_required
+def analytics():
+    try:
+        if not os.path.exists(app.config['DATA_PATH']):
+            return render_template('error.html', error="Upload CSV first")
+
+        df = pd.read_csv(app.config['DATA_PATH'])
+
+        total_sales = float(df["total_revenue"].sum())
+        avg_order = float(df["total_revenue"].mean())
+
+        return render_template(
+            'analytics.html',
+            total_sales=total_sales,
+            average_order_value=avg_order
+        )
+
+    except Exception as e:
+        return render_template('error.html', error=str(e))
 
 # ------------------ PREDICTION ------------------
+
 @app.route('/predict', methods=["GET", "POST"])
 @login_required
 def predict():
     if request.method == "POST":
         try:
             data = request.get_json()
-            if not data:
-                return jsonify({"success": False, "error": "No data provided"}), 400
 
             q1 = float(data.get('quantity1', 0))
             q2 = float(data.get('quantity2', 0))
@@ -314,118 +209,35 @@ def predict():
             if model:
                 try:
                     pred = model.predict(np.array([[q1, q2, q3]]))[0][0]
-                except Exception:
+                except:
                     pred = simple_prediction(q1, q2, q3)
             else:
                 pred = simple_prediction(q1, q2, q3)
 
-            logger.info(f"Prediction made by {current_user.username}: {pred}")
             return jsonify({"success": True, "prediction": float(pred)})
 
-        except (ValueError, KeyError) as e:
-            return jsonify({"success": False, "error": "Invalid input data"}), 400
         except Exception as e:
-            logger.error(f"Prediction error: {e}")
-            return jsonify({"success": False, "error": "Prediction failed"}), 500
+            return jsonify({"success": False, "error": str(e)})
 
     return render_template("prediction.html")
 
-# ------------------ ANALYTICS ------------------
-@app.route('/analytics')
-@login_required
-def analytics():
-    try:
-        data_path = app.config['DATA_PATH']
-        if not os.path.exists(data_path):
-            return render_template('error.html', error="Please upload a CSV file first")
+# ------------------ API ------------------
 
-        df = pd.read_csv(data_path)
-        if df.empty:
-            return render_template('error.html', error="No data available")
-
-        # Calculate metrics
-        total_sales = float(df["total_revenue"].sum() if "total_revenue" in df.columns else 0)
-        avg_order = float(df["total_revenue"].mean() if "total_revenue" in df.columns else 0)
-
-        # Top/Bottom products
-        top = df.nlargest(5, "quantity_stock").to_dict('records') if "quantity_stock" in df.columns else []
-        bottom = df.nsmallest(5, "quantity_stock").to_dict('records') if "quantity_stock" in df.columns else []
-
-        # Generate chart
-        try:
-            plt.figure(figsize=(10, 6))
-            if "total_revenue" in df.columns:
-                plt.plot(df['total_revenue'].values)
-                plt.title('Sales Trend')
-                plt.xlabel('Orders')
-                plt.ylabel('Revenue')
-                plt.tight_layout()
-                chart_path = os.path.join(STATIC_DIR, 'sales.png')
-                plt.savefig(chart_path, dpi=100, bbox_inches='tight')
-                plt.close()
-            else:
-                chart_path = None
-        except Exception as e:
-            logger.warning(f"Chart generation failed: {e}")
-            chart_path = None
-
-        return render_template('analytics.html',
-                             total_sales=total_sales,
-                             average_order_value=avg_order,
-                             top_selling_products=top,
-                             bottom_selling_products=bottom,
-                             chart_exists=chart_path is not None)
-
-    except Exception as e:
-        logger.error(f"Analytics error: {e}")
-        return render_template('error.html', error=f"Analytics error: {str(e)}")
-
-# ------------------ API ENDPOINTS ------------------
 @app.route('/api/inventory-summary')
 @login_required
 def inventory_summary():
     try:
-        data_path = app.config['DATA_PATH']
-        if not os.path.exists(data_path):
-            return jsonify({"metrics": {}, "message": "No data uploaded"})
+        if not os.path.exists(app.config['DATA_PATH']):
+            return jsonify({"metrics": {}})
 
-        report = generate_inventory_report(data_path)
+        report = generate_inventory_report(app.config['DATA_PATH'])
         return jsonify(report)
 
     except Exception as e:
-        logger.error(f"API inventory summary error: {e}")
-        return jsonify({"error": "Failed to generate report"}), 500
-
-# ------------------ HEALTH CHECK ------------------
-@app.route('/health')
-def health_check():
-    return jsonify({
-        "status": "healthy",
-        "model_loaded": model is not None,
-        "timestamp": datetime.now().isoformat()
-    })
-
-@app.route('/ready')
-def ready_check():
-    return jsonify({"status": "ready"})
-
-# ------------------ ERROR HANDLERS ------------------
-@app.errorhandler(404)
-def not_found(error):
-    return render_template('error.html', error="Page not found"), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    logger.error(f"500 error: {error}")
-    return render_template('error.html', error="Internal server error"), 500
+        return jsonify({"error": str(e)})
 
 # ------------------ MAIN ------------------
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    host = os.environ.get('HOST', '0.0.0.0')
-    
-    logger.info(f"🚀 Starting Inventory Management System on {host}:{port}")
-    logger.info(f"📁 Data directory: {DATA_DIR}")
-    logger.info(f"📊 Model loaded: {'Yes' if model else 'No (using fallback)'}")
-    
-    app.run(host=host, port=port, debug=False, threaded=True)
+    app.run(host="0.0.0.0", port=port)
