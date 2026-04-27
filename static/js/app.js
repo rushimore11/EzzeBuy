@@ -74,10 +74,17 @@ class IMSApp {
             dropZone.dataset.imsBound = 'true';
         }
 
-        // Optional AJAX forms (opt-in only) + legacy upload form support
-        const ajaxForms = document.querySelectorAll('form[data-ajax="true"], form#uploadForm');
-        ajaxForms.forEach(form => {
-            if (!form.dataset.imsBound) {
+        // Form submissions (resolve merge intent: generic scan with safe eligibility checks)
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            const action = (form.getAttribute('action') || window.location.pathname || '').toLowerCase();
+            const isAuthFlow = action.includes('/login') || action.includes('/signup') || action.includes('/logout');
+            const isPredictionForm = form.id === 'predictionForm';
+            const isUploadForm = form.id === 'uploadForm';
+            const isAjaxOptIn = form.dataset.ajax === 'true';
+            const shouldUseAjaxSubmit = (isUploadForm || isAjaxOptIn) && !isAuthFlow && !isPredictionForm;
+
+            if (!form.dataset.imsBound && shouldUseAjaxSubmit) {
                 form.addEventListener('submit', this.handleFormSubmit.bind(this));
                 form.dataset.imsBound = 'true';
             }
