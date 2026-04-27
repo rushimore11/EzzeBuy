@@ -19,7 +19,11 @@ class IMSApp {
         this.initCharts();
         
         // Load dashboard data on page load
-        this.loadDashboardData();
+        //this.loadDashboardData();
+        // Load dashboard only on home page (fixes login redirect issue)
+        if (window.location.pathname === '/' || window.location.pathname === '/index') {
+            this.loadDashboardData();
+        }
         
         // Check model status if on prediction page
         if (window.location.pathname === '/predict') {
