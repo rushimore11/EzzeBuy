@@ -12,6 +12,8 @@ class IMSApp {
         this.initializeComponents();
         this.setupAnimations();
         this.setupNavigation();
+        this.initThemePreference();
+        this.injectThemeToggle();
         this.initTooltips();
         this.initLoadingStates();
         this.initCharts();
@@ -113,6 +115,58 @@ class IMSApp {
                 link.classList.add('active');
             }
         });
+    }
+
+    initThemePreference() {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+        this.setTheme(initialTheme);
+    }
+
+    injectThemeToggle() {
+        const navList = document.querySelector('.navbar-nav');
+        if (!navList || document.querySelector('.theme-toggle-btn')) {
+            return;
+        }
+
+        const themeItem = document.createElement('li');
+        themeItem.innerHTML = `
+            <button type="button" class="theme-toggle-btn" aria-label="Toggle dark mode">
+                <i class="fas"></i>
+                <span></span>
+            </button>
+        `;
+
+        const toggleButton = themeItem.querySelector('.theme-toggle-btn');
+        toggleButton.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            this.setTheme(nextTheme);
+        });
+
+        navList.appendChild(themeItem);
+        this.updateThemeToggleUI();
+    }
+
+    setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+        this.updateThemeToggleUI();
+    }
+
+    updateThemeToggleUI() {
+        const toggleButton = document.querySelector('.theme-toggle-btn');
+        if (!toggleButton) {
+            return;
+        }
+
+        const icon = toggleButton.querySelector('i');
+        const label = toggleButton.querySelector('span');
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+        icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+        label.textContent = isDark ? 'Light' : 'Dark';
     }
 
     handleFileSelect(event) {
@@ -808,18 +862,18 @@ class IMSApp {
     }
 
     formatCurrency(amount) {
-        return new Intl.NumberFormat('en-US', {
+        return new Intl.NumberFormat('en-IN', {
             style: 'currency',
-            currency: 'USD'
+            currency: 'INR'
         }).format(amount);
     }
 
     formatNumber(number) {
-        return new Intl.NumberFormat('en-US').format(number);
+        return new Intl.NumberFormat('en-IN').format(number);
     }
 
     formatDate(date) {
-        return new Date(date).toLocaleDateString('en-US', {
+        return new Date(date).toLocaleDateString('en-IN', {
             year: 'numeric',
             month: 'short',
             day: 'numeric'
@@ -827,7 +881,7 @@ class IMSApp {
     }
 
     formatDateTime(date) {
-        return new Date(date).toLocaleString('en-US', {
+        return new Date(date).toLocaleString('en-IN', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
