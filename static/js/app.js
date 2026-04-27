@@ -4,10 +4,15 @@
 
 class IMSApp {
     constructor() {
+        this.DEFAULT_TIMEOUT_MS = 30000;
+        this.isInitialized = false;
         this.init();
     }
 
     init() {
+        if (this.isInitialized) return;
+        this.isInitialized = true;
+
         this.setupEventListeners();
         this.initializeComponents();
         this.setupAnimations();
@@ -34,40 +39,48 @@ class IMSApp {
     setupEventListeners() {
         // File upload form
         const uploadForm = document.getElementById('uploadForm');
-        if (uploadForm) {
+        if (uploadForm && !uploadForm.dataset.imsBound) {
             uploadForm.addEventListener('submit', this.handleFormSubmit.bind(this));
+            uploadForm.dataset.imsBound = 'true';
         }
         
         // Prediction form
         const predictionForm = document.getElementById('predictionForm');
-        if (predictionForm) {
+        if (predictionForm && !predictionForm.dataset.imsBound) {
             predictionForm.addEventListener('submit', this.handlePredictionForm.bind(this));
+            predictionForm.dataset.imsBound = 'true';
         }
         
         // Train model button
         const trainModelBtn = document.getElementById('trainModelBtn');
-        if (trainModelBtn) {
+        if (trainModelBtn && !trainModelBtn.dataset.imsBound) {
             trainModelBtn.addEventListener('click', this.handleTrainModel.bind(this));
+            trainModelBtn.dataset.imsBound = 'true';
         }
         
         // File input change
         const fileInput = document.getElementById('fileInput');
-        if (fileInput) {
+        if (fileInput && !fileInput.dataset.imsBound) {
             fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+            fileInput.dataset.imsBound = 'true';
         }
         
         // Drag and drop events
         const dropZone = document.querySelector('.file-upload');
-        if (dropZone) {
+        if (dropZone && !dropZone.dataset.imsBound) {
             dropZone.addEventListener('dragover', this.handleDragOver.bind(this));
             dropZone.addEventListener('dragleave', this.handleDragLeave.bind(this));
             dropZone.addEventListener('drop', this.handleDrop.bind(this));
+            dropZone.dataset.imsBound = 'true';
         }
 
-        // Form submissions
-        const forms = document.querySelectorAll('form');
-        forms.forEach(form => {
-            form.addEventListener('submit', this.handleFormSubmit.bind(this));
+        // Optional AJAX forms (opt-in only)
+        const ajaxForms = document.querySelectorAll('form[data-ajax="true"]');
+        ajaxForms.forEach(form => {
+            if (!form.dataset.imsBound) {
+                form.addEventListener('submit', this.handleFormSubmit.bind(this));
+                form.dataset.imsBound = 'true';
+            }
         });
 
         // Navigation active state
@@ -122,7 +135,12 @@ class IMSApp {
     }
 
     initThemePreference() {
-        const savedTheme = localStorage.getItem('theme');
+        let savedTheme = null;
+        try {
+            savedTheme = localStorage.getItem('theme');
+        } catch (error) {
+            console.warn('Unable to read theme from localStorage:', error);
+        }
         const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
         const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
         this.setTheme(initialTheme);
@@ -155,7 +173,11 @@ class IMSApp {
 
     setTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
+        try {
+            localStorage.setItem('theme', theme);
+        } catch (error) {
+            console.warn('Unable to persist theme in localStorage:', error);
+        }
         this.updateThemeToggleUI();
     }
 
@@ -391,7 +413,7 @@ class IMSApp {
         const timeoutId = setTimeout(() => {
             this.hideLoading(form);
             this.showNotification('Request timed out. Please try again.', 'error');
-        }, 30000); // 30 second timeout
+        }, this.DEFAULT_TIMEOUT_MS); // 30 second timeout
         
         try {
             this.showLoading(form);
@@ -435,7 +457,7 @@ class IMSApp {
 
     async submitForm(formData, action) {
         try {
-            const response = await fetch(action, {
+            const response = await this.fetchWithTimeout(action, {
                 method: 'POST',
                 body: formData
             });
@@ -443,8 +465,24 @@ class IMSApp {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
+
+            if (response.redirected) {
+                return {
+                    success: true,
+                    message: 'Redirecting...',
+                    redirect: response.url
+                };
+            }
+
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                return {
+                    success: true,
+                    message: 'Operation completed successfully!'
+                };
+            }
             
-            const data = await response.json();
+            const data = await this.safeJson(response);
             
             if (data.success === true) {
                 return { success: true, message: data.message || 'Operation completed successfully!' };
@@ -471,7 +509,7 @@ class IMSApp {
         formData.append('file', file);
         
         try {
-            const response = await fetch('/upload', {
+            const response = await this.fetchWithTimeout('/upload', {
                 method: 'POST',
                 body: formData
             });
@@ -480,7 +518,7 @@ class IMSApp {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            const data = await response.json();
+            const data = await this.safeJson(response);
             
             if (data.success === true) {
                 this.showNotification(data.message, 'success');
@@ -519,7 +557,7 @@ class IMSApp {
         try {
             this.showNotification('Training model... This may take a few minutes.', 'info');
             
-            const response = await fetch('/train', {
+            const response = await this.fetchWithTimeout('/train', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -530,7 +568,7 @@ class IMSApp {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            const data = await response.json();
+            const data = await this.safeJson(response);
             
             if (data.success === true) {
                 this.showNotification(data.message, 'success');
@@ -560,7 +598,7 @@ class IMSApp {
 
     async makePrediction(data) {
         try {
-            const response = await fetch('/predict', {
+            const response = await this.fetchWithTimeout('/predict', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -572,7 +610,7 @@ class IMSApp {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            const result = await response.json();
+            const result = await this.safeJson(response);
             
             if (result.success === true && result.prediction !== undefined) {
                 return { success: true, prediction: result.prediction };
@@ -619,7 +657,7 @@ class IMSApp {
         notification.innerHTML = `
             <div class="d-flex justify-between items-center">
                 <span>${sanitizedMessage}</span>
-                <button onclick="this.parentElement.parentElement.remove()" 
+                <button type="button" class="notification-close-btn"
                         style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-left: 1rem; color: inherit;">
                     ×
                 </button>
@@ -627,6 +665,11 @@ class IMSApp {
         `;
         
         document.body.appendChild(notification);
+
+        const closeBtn = notification.querySelector('.notification-close-btn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => notification.remove());
+        }
         
         // Auto-remove after 5 seconds
         setTimeout(() => {
@@ -766,7 +809,12 @@ class IMSApp {
         const chartElements = document.querySelectorAll('[data-chart]');
         chartElements.forEach(element => {
             const chartType = element.getAttribute('data-chart');
-            const chartData = JSON.parse(element.getAttribute('data-chart-data') || '{}');
+            let chartData = {};
+            try {
+                chartData = JSON.parse(element.getAttribute('data-chart-data') || '{}');
+            } catch (error) {
+                console.error('Invalid chart data JSON:', error);
+            }
             this.createChart(element, chartType, chartData);
         });
     }
@@ -813,7 +861,7 @@ class IMSApp {
 
         async loadDashboardData() {
     try {
-        const response = await fetch('/api/inventory-summary', {
+        const response = await this.fetchWithTimeout('/api/inventory-summary', {
             credentials: 'include'
         });
 
@@ -837,6 +885,29 @@ class IMSApp {
         console.error(error);
     }
 }
+
+    async fetchWithTimeout(url, options = {}, timeout = this.DEFAULT_TIMEOUT_MS) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+            return await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
+    async safeJson(response) {
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error('Expected JSON response from server');
+        }
+
+        return response.json();
+    }
 
     updateDashboardStats(metrics) {
         console.log('Updating dashboard stats with:', metrics);
