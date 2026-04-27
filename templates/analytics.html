@@ -22,6 +22,8 @@
                 <li><a href="/inventory" class="nav-link">Inventory</a></li>
                 <li><a href="/analytics" class="nav-link active">Analytics</a></li>
                 <li><a href="/predict" class="nav-link">Predictions</a></li>
+                <li><a href="{{ url_for('logout') }}" class="nav-link">Logout</a></li>
+                <li><button type="button" class="theme-toggle" data-theme-toggle><i class="fas fa-moon"></i> Dark</button></li>
             </ul>
         </div>
     </nav>
@@ -44,11 +46,11 @@
         <!-- Key Metrics -->
         <div class="grid grid-4 mb-6">
             <div class="stats-card">
-                <div class="stats-number">${{ "%.0f"|format(total_sales) }}</div>
+                <div class="stats-number">₹{{ "%.0f"|format(total_sales) }}</div>
                 <div class="stats-label">Total Sales</div>
             </div>
             <div class="stats-card">
-                <div class="stats-number">${{ "%.0f"|format(average_order_value) }}</div>
+                <div class="stats-number">₹{{ "%.0f"|format(average_order_value) }}</div>
                 <div class="stats-label">Avg Order Value</div>
             </div>
             <div class="stats-card">
@@ -113,7 +115,7 @@
                                     <strong>{{ product.product_name }}</strong>
                                 </td>
                                 <td>{{ product.quantity_stock }}</td>
-                                <td>${{ "%.0f"|format(product.total_revenue) }}</td>
+                                <td>₹{{ "%.0f"|format(product.total_revenue) }}</td>
                                 <td>
                                     <span class="badge badge-success">High Stock</span>
                                 </td>
@@ -165,7 +167,7 @@
                                     <strong>{{ product.product_name }}</strong>
                                 </td>
                                 <td>{{ product.quantity_stock }}</td>
-                                <td>${{ "%.0f"|format(product.total_revenue) }}</td>
+                                <td>₹{{ "%.0f"|format(product.total_revenue) }}</td>
                                 <td>
                                     <span class="badge badge-warning">Low Stock</span>
                                 </td>
@@ -200,13 +202,13 @@
                 <div class="text-center p-4">
                     <i class="fas fa-chart-line fa-2x text-success mb-3"></i>
                     <h4 class="text-success">Sales Performance</h4>
-                    <p class="text-muted">Your total sales of ${{ "%.0f"|format(total_sales) }} shows strong performance.</p>
+                    <p class="text-muted">Your total sales of ₹{{ "%.0f"|format(total_sales) }} shows strong performance.</p>
                 </div>
                 
                 <div class="text-center p-4">
-                    <i class="fas fa-dollar-sign fa-2x text-primary mb-3"></i>
+                    <i class="fas fa-indian-rupee-sign fa-2x text-primary mb-3"></i>
                     <h4 class="text-primary">Average Order Value</h4>
-                    <p class="text-muted">Average order value of ${{ "%.0f"|format(average_order_value) }} indicates good pricing strategy.</p>
+                    <p class="text-muted">Average order value of ₹{{ "%.0f"|format(average_order_value) }} indicates good pricing strategy.</p>
                 </div>
                 
                 <div class="text-center p-4">
@@ -294,7 +296,7 @@
                             beginAtZero: true,
                             ticks: {
                                 callback: function(value) {
-                                    return '$' + value.toLocaleString();
+                                    return '₹' + value.toLocaleString('en-IN');
                                 }
                             }
                         }

@@ -72,6 +72,38 @@
     --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
 }
 
+
+
+/* Dark Theme Variables */
+body.dark-mode {
+    --primary-color: #63b3ed;
+    --primary-light: #90cdf4;
+    --primary-dark: #2b6cb0;
+    --secondary-color: #4a5568;
+    --accent-color: #4299e1;
+
+    --white: #1f2937;
+    --gray-50: #111827;
+    --gray-100: #1f2937;
+    --gray-200: #374151;
+    --gray-300: #4b5563;
+    --gray-400: #9ca3af;
+    --gray-500: #d1d5db;
+    --gray-600: #e5e7eb;
+    --gray-700: #f3f4f6;
+    --gray-800: #f9fafb;
+    --gray-900: #ffffff;
+
+    --success-bg: #064e3b;
+    --warning-bg: #78350f;
+    --danger-bg: #7f1d1d;
+
+    --bg-primary: #0b1220;
+    --bg-secondary: #111827;
+    --bg-dark: #030712;
+    --bg-gradient: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+}
+
 /* Reset and Base Styles */
 * {
     margin: 0;
@@ -179,6 +211,23 @@ p {
     color: var(--primary-color);
     background: var(--primary-color);
     color: var(--white);
+}
+
+.theme-toggle {
+    background: transparent;
+    border: 1px solid var(--gray-300);
+    color: var(--gray-700);
+    padding: 0.45rem 0.75rem;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: var(--transition);
+    font-weight: 500;
+}
+
+.theme-toggle:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: var(--gray-100);
 }
 
 /* Main Container */
