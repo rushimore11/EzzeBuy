@@ -10,13 +10,14 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from flask import Flask, request, render_template, jsonify, redirect, url_for
-from flask_login import LoginManager, login_user, login_required, logout_user
+from flask import Flask, request, render_template, jsonify, redirect, url_for, flash
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from models import users, User
+from models import users, User, save_users
 from utils import generate_inventory_report, get_low_stock_products, get_near_expiry_products
 
 # ------------------ CONFIG ------------------
@@ -82,32 +83,79 @@ def simple_prediction(q1, q2, q3):
 def home():
     return render_template("index.html")
 
+# ------------------ SIGN UP ------------------
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if current_user.is_authenticated:
+        return redirect(url_for("home"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if len(username) < 3:
+            flash("Username must be at least 3 characters long.", "error")
+            return render_template("signup.html")
+
+        if len(password) < 6:
+            flash("Password must be at least 6 characters long.", "error")
+            return render_template("signup.html")
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return render_template("signup.html")
+
+        if username in users:
+            flash("Username already exists. Please choose another one.", "error")
+            return render_template("signup.html")
+
+        next_user_id = max((u.id for u in users.values()), default=0) + 1
+        new_user = User(id=next_user_id, username=username, password_hash=generate_password_hash(password))
+        users[username] = new_user
+        save_users(users)
+
+        flash("Account created successfully. Please sign in.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("signup.html")
+
+
 # ------------------ LOGIN ------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("home"))
+
     if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
 
         user = users.get(username)
 
-        if user and user.password == password:
+        if user and user.verify_password(password):
             login_user(user)
             return redirect(url_for("home"))
 
-        return "Invalid username or password"
+        flash("Invalid username or password.", "error")
 
     return render_template("login.html")
 
+
 # ------------------ LOGOUT ------------------
-@app.route("/logout")
+@app.route("/logout", methods=["GET", "POST"])
 @login_required
 def logout():
-    logout_user()
-    return redirect(url_for("login"))
+    if request.method == "POST":
+        logout_user()
+        flash("You have been logged out successfully.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("logout.html")
 
 # ------------------ FILE UPLOAD ------------------
 @app.route('/upload', methods=['POST'])
+@login_required
 def upload_file():
     try:
         if 'file' not in request.files:
@@ -131,6 +179,7 @@ def upload_file():
 
 # ------------------ INVENTORY ------------------
 @app.route('/inventory')
+@login_required
 def inventory():
     try:
         if not os.path.exists(app.config['DATA_PATH']):
@@ -154,6 +203,7 @@ def inventory():
 
 # ------------------ PREDICTION ------------------
 @app.route('/predict', methods=["GET", "POST"])
+@login_required
 def predict():
     if request.method == "POST":
         try:
@@ -180,6 +230,7 @@ def predict():
 
 # ------------------ ANALYTICS ------------------
 @app.route('/analytics')
+@login_required
 def analytics():
     try:
         if not os.path.exists(app.config['DATA_PATH']):
@@ -209,6 +260,7 @@ def analytics():
 
 # ------------------ INVENTORY API ------------------
 @app.route('/api/inventory-summary')
+@login_required
 def inventory_summary():
     try:
         if not os.path.exists(app.config['DATA_PATH']):

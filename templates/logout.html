@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logout - EzzeBuy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="{{ url_for('home') }}" class="navbar-brand">
+                <i class="fas fa-boxes"></i>
+                EzzeBuy
+            </a>
+            <ul class="navbar-nav">
+                <li><a href="{{ url_for('home') }}" class="nav-link">Home</a></li>
+                <li><a href="{{ url_for('logout') }}" class="nav-link active">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="card text-center" style="max-width: 520px; margin: 2rem auto;">
+            <div class="card-header">
+                <h1 class="card-title"><i class="fas fa-right-from-bracket text-primary"></i> Confirm Logout</h1>
+                <p class="card-subtitle">Do you want to securely end your session?</p>
+            </div>
+
+            <form method="POST" class="grid grid-2" style="gap: 1rem;">
+                <a href="{{ url_for('home') }}" class="btn btn-outline btn-lg">
+                    <i class="fas fa-arrow-left"></i>
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-danger btn-lg">
+                    <i class="fas fa-right-from-bracket"></i>
+                    Logout
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
